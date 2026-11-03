@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>10분 타임로그</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#4f8ef7">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="타임로그">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+
+<style>
+:root{--bg:#fafaf9;--fg:#1c1b1a;--mut:#78716c;--line:#e0ddd8;--card:#fff;--c1:#4f8ef7;--c2:#4cb87a;--c3:#f2c744;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#191918;--fg:#ece9e4;--mut:#a29b93;--line:#3a3835;--card:#222120;--c1:#3b6fc4;--c2:#3a9161;--c3:#c9a42f}}
+:root[data-theme="dark"]{--bg:#191918;--fg:#ece9e4;--mut:#a29b93;--line:#3a3835;--card:#222120;--c1:#3b6fc4;--c2:#3a9161;--c3:#c9a42f}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 -apple-system,"Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic",sans-serif}
+main{max-width:720px;margin:0 auto;padding:16px}
+h1{font-size:20px;margin:0 0 12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+input,button{font:inherit;color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:7px 10px}
+input[type=text]{flex:1;min-width:120px}
+button{cursor:pointer}
+.cats{display:flex;gap:6px}
+.cat{padding:7px 14px;border-radius:999px;opacity:.55}
+.cat.on{opacity:1;color:#111;font-weight:600;border-color:transparent}
+.cat[data-c="공부"].on{background:var(--c1)}.cat[data-c="삶"].on{background:var(--c2)}.cat[data-c="휴식"].on{background:var(--c3)}
+.go{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.msg{color:#d6453d;font-size:13px;min-height:18px;margin-top:6px}
+.wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:360px}
+th{font-weight:500;color:var(--mut);font-size:12px;padding:2px 0}
+th.h{text-align:right;padding-right:8px;width:44px}
+td.c{height:20px;border:1px solid var(--line);padding:0}
+td.c[data-c="공부"]{background:var(--c1)}td.c[data-c="삶"]{background:var(--c2)}td.c[data-c="휴식"]{background:var(--c3)}
+.sum{display:flex;gap:14px;flex-wrap:wrap;font-size:14px}
+.dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px}
+ul{list-style:none;margin:0;padding:0}
+li{display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line);font-size:14px}
+li:last-child{border:0}li .t{color:var(--mut);font-variant-numeric:tabular-nums}li span.n{flex:1}
+.x{padding:2px 8px;color:var(--mut)}
+.mut{color:var(--mut);font-size:13px}
+</style>
+</head>
+<body>
+<main>
+<h1>10분 타임로그</h1>
+
+<div class="card">
+  <div class="row" style="margin-bottom:10px">
+    <button id="prev">◀</button><input type="date" id="date"><button id="next">▶</button>
+  </div>
+  <div class="row" style="margin-bottom:8px">
+    <input type="text" id="name" placeholder="한 일 (선택)">
+  </div>
+  <div class="row">
+    <div class="cats" id="cats">
+      <button class="cat on" data-c="공부">공부</button>
+      <button class="cat" data-c="삶">삶</button>
+      <button class="cat" data-c="휴식">휴식</button>
+    </div>
+    <input type="time" id="s" step="600" value="09:00"> ~
+    <input type="time" id="e" step="600" value="10:00">
+    <button class="go" id="add">추가</button>
+  </div>
+  <div class="msg" id="msg"></div>
+</div>
+
+<div class="card">
+  <div class="sum" id="sum"></div>
+</div>
+
+<div class="card wrap">
+  <table id="grid"></table>
+</div>
+
+<div class="card">
+  <ul id="list"></ul>
+  <div class="mut" id="empty">아직 기록이 없어요. 카테고리와 시간을 넣고 추가를 눌러 보세요.</div>
+</div>
+</main>
+
+<script>
+var CATS=["공부","삶","휴식"], cat="공부", store={};
+var $=function(i){return document.getElementById(i)};
+function today(){var d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
+function load(){try{store=JSON.parse(localStorage.getItem("timelog")||"{}")}catch(e){store={}}}
+function save(){try{localStorage.setItem("timelog",JSON.stringify(store))}catch(e){}}
+function day(){var k=$("date").value;return store[k]||(store[k]=[])}
+function toMin(v){var p=v.split(":");return +p[0]*60+ +p[1]}
+function fmt(m){return String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0")}
+function hm(m){var h=Math.floor(m/60),r=m%60;return (h?h+"시간 ":"")+(r||!h?r+"분":"")}
+
+function render(){
+  var items=day(), slots=new Array(144), tot={공부:0,삶:0,휴식:0};
+  items.forEach(function(it){for(var i=it.s/10;i<it.e/10;i++)slots[i]=it.c});
+  slots.forEach(function(c){if(c)tot[c]+=10});
+  var h='<tr><th></th>';
+  for(var m=0;m<60;m+=10)h+='<th>:'+String(m).padStart(2,"0")+'</th>';
+  h+='</tr>';
+  for(var r=0;r<24;r++){
+    h+='<tr><th class="h">'+r+'시</th>';
+    for(var c=0;c<6;c++){var v=slots[r*6+c];h+='<td class="c"'+(v?' data-c="'+v+'"':'')+'></td>'}
+    h+='</tr>';
+  }
+  $("grid").innerHTML=h;
+  var colors={공부:"var(--c1)",삶:"var(--c2)",휴식:"var(--c3)"};
+  $("sum").innerHTML=CATS.map(function(c){return '<span><i class="dot" style="background:'+colors[c]+'"></i>'+c+' '+hm(tot[c])+'</span>'}).join("");
+  var sorted=items.slice().sort(function(a,b){return a.s-b.s});
+  $("list").innerHTML=sorted.map(function(it){
+    return '<li><i class="dot" style="background:'+colors[it.c]+'"></i><span class="t">'+fmt(it.s)+'~'+fmt(it.e)+'</span><span class="n">'+(it.n?it.n.replace(/[<>&]/g,""):it.c)+'</span><button class="x" data-id="'+it.id+'">✕</button></li>';
+  }).join("");
+  $("empty").style.display=items.length?"none":"block";
+}
+
+$("cats").onclick=function(ev){
+  var b=ev.target.closest(".cat"); if(!b)return;
+  cat=b.dataset.c;
+  document.querySelectorAll(".cat").forEach(function(x){x.classList.toggle("on",x===b)});
+};
+$("add").onclick=function(){
+  var s=toMin($("s").value),e=toMin($("e").value);
+  if(isNaN(s)||isNaN(e)){$("msg").textContent="시작과 종료 시간을 입력해 주세요.";return}
+  if(e<=s){$("msg").textContent="종료 시간이 시작보다 늦어야 해요. 자정을 넘기면 둘로 나눠 입력해 주세요.";return}
+  s=Math.round(s/10)*10;e=Math.round(e/10)*10;
+  $("msg").textContent="";
+  day().push({id:Date.now(),c:cat,n:$("name").value.trim(),s:s,e:e});
+  save();$("name").value="";$("s").value=fmt(e);
+  var ne=Math.min(e+60,1440);$("e").value=fmt(ne===1440?1439:ne);
+  render();
+};
+$("list").onclick=function(ev){
+  var b=ev.target.closest(".x"); if(!b)return;
+  var k=$("date").value;store[k]=day().filter(function(i){return String(i.id)!==b.dataset.id});
+  save();render();
+};
+function shift(n){var d=new Date($("date").value+"T00:00:00");d.setDate(d.getDate()+n);
+  $("date").value=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");render()}
+$("prev").onclick=function(){shift(-1)};
+$("next").onclick=function(){shift(1)};
+$("date").onchange=render;
+load();$("date").value=today();render();
+if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){})})}
+</script>
+</body>
+</html>
