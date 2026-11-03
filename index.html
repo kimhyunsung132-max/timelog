@@ -46,11 +46,22 @@ li{display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid
 li:last-child{border:0}li .t{color:var(--mut);font-variant-numeric:tabular-nums}li span.n{flex:1}
 .x{padding:2px 8px;color:var(--mut)}
 .mut{color:var(--mut);font-size:13px}
+.tabs{display:flex;gap:6px;margin-bottom:12px}.tab{flex:1;padding:8px}.tab.on{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.seg{display:flex;gap:6px}.seg button.on{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.bars{display:flex;gap:3px;margin-top:12px;align-items:flex-end}
+.col{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center}
+.stack{width:100%;height:130px;display:flex;flex-direction:column-reverse;justify-content:flex-start;border-bottom:1px solid var(--line)}
+.seg1{background:var(--c1)}.seg2{background:var(--c2)}.seg3{background:var(--c3)}
+.lbl{font-size:10px;color:var(--mut);height:26px;text-align:center;line-height:1.2;margin-top:3px;white-space:nowrap}
+.big{font-size:22px;font-weight:600}.stat{flex:1;min-width:90px}
+.mid{flex:1;text-align:center;font-weight:600}
 </style>
 </head>
 <body>
 <main>
 <h1>10분 타임로그</h1>
+<div class="tabs"><button class="tab on" id="tabR">기록</button><button class="tab" id="tabS">통계</button></div>
+<div id="v-rec">
 
 <div class="card">
   <div class="row" style="margin-bottom:10px">
@@ -83,6 +94,17 @@ li:last-child{border:0}li .t{color:var(--mut);font-variant-numeric:tabular-nums}
 <div class="card">
   <ul id="list"></ul>
   <div class="mut" id="empty">아직 기록이 없어요. 카테고리와 시간을 넣고 추가를 눌러 보세요.</div>
+</div>
+</div>
+<div id="v-stat" hidden>
+  <div class="card">
+    <div class="row" style="margin-bottom:10px">
+      <div class="seg"><button id="mW" class="on">주간</button><button id="mM">월간</button></div>
+    </div>
+    <div class="row"><button id="sPrev">◀</button><div class="mid" id="sLabel"></div><button id="sNext">▶</button></div>
+  </div>
+  <div class="card"><div class="row" id="sTot"></div><div class="mut" id="sNote" style="margin-top:8px"></div></div>
+  <div class="card"><div class="sum" id="sLegend"></div><div class="bars" id="sBars"></div></div>
 </div>
 </main>
 
@@ -145,6 +167,59 @@ function shift(n){var d=new Date($("date").value+"T00:00:00");d.setDate(d.getDat
 $("prev").onclick=function(){shift(-1)};
 $("next").onclick=function(){shift(1)};
 $("date").onchange=render;
+
+var smode="week", sref=new Date();
+function ds(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
+function dayTot(k){var items=store[k]||[],sl=new Array(144),t={공부:0,삶:0,휴식:0};
+  items.forEach(function(it){for(var i=it.s/10;i<it.e/10;i++)sl[i]=it.c});
+  sl.forEach(function(c){if(c)t[c]+=10});return t}
+function renderStats(){
+  var y=sref.getFullYear(),m=sref.getMonth(),days=[],label;
+  if(smode==="week"){
+    var st=new Date(y,m,sref.getDate()-((sref.getDay()+6)%7));
+    for(var i=0;i<7;i++)days.push(new Date(st.getFullYear(),st.getMonth(),st.getDate()+i));
+    var a=days[0],b=days[6];
+    label=(a.getMonth()+1)+"월 "+a.getDate()+"일 ~ "+(a.getMonth()===b.getMonth()?"":(b.getMonth()+1)+"월 ")+b.getDate()+"일";
+  }else{
+    var n=new Date(y,m+1,0).getDate();
+    for(var j=1;j<=n;j++)days.push(new Date(y,m,j));
+    label=y+"년 "+(m+1)+"월";
+  }
+  $("sLabel").textContent=label;
+  var tot={공부:0,삶:0,휴식:0},rec=0,rows=days.map(function(d){
+    var t=dayTot(ds(d)),sum=t.공부+t.삶+t.휴식;
+    if(sum>0)rec++;CATS.forEach(function(c){tot[c]+=t[c]});return {d:d,t:t,sum:sum}});
+  var colors={공부:"var(--c1)",삶:"var(--c2)",휴식:"var(--c3)"};
+  $("sTot").innerHTML=CATS.map(function(c){
+    var avg=rec?Math.round(tot[c]/rec/10)*10:0;
+    return '<div class="stat"><div class="mut"><i class="dot" style="background:'+colors[c]+'"></i>'+c+'</div><div class="big">'+hm(tot[c])+'</div><div class="mut">하루 평균 '+hm(avg)+'</div></div>'}).join("");
+  $("sNote").textContent="기록한 날 "+rec+"일 / "+days.length+"일 (평균은 기록한 날 기준)";
+  $("sLegend").innerHTML=CATS.map(function(c){return '<span><i class="dot" style="background:'+colors[c]+'"></i>'+c+'</span>'}).join("");
+  var max=Math.max.apply(null,rows.map(function(r){return r.sum}).concat([60])),dn=["일","월","화","수","목","금","토"],h="";
+  rows.forEach(function(r){
+    var segs="";
+    [["공부","seg1"],["삶","seg2"],["휴식","seg3"]].forEach(function(x){
+      if(r.t[x[0]])segs+='<div class="'+x[1]+'" style="height:'+(r.t[x[0]]/max*100)+'%"></div>'});
+    var d=r.d.getDate(),lb;
+    if(smode==="week")lb=dn[r.d.getDay()]+"<br>"+d;
+    else lb=(d===1||d%5===0)?String(d):"&nbsp;";
+    var tip=(r.d.getMonth()+1)+"/"+d+" 공부 "+hm(r.t.공부)+" · 삶 "+hm(r.t.삶)+" · 휴식 "+hm(r.t.휴식);
+    h+='<div class="col" title="'+tip+'"><div class="stack">'+segs+'</div><div class="lbl">'+lb+'</div></div>';
+  });
+  $("sBars").innerHTML=h;
+}
+function showTab(t){
+  $("v-rec").hidden=t!=="rec";$("v-stat").hidden=t!=="stat";
+  $("tabR").classList.toggle("on",t==="rec");$("tabS").classList.toggle("on",t==="stat");
+  if(t==="stat"){sref=new Date($("date").value+"T00:00:00");renderStats()}
+}
+$("tabR").onclick=function(){showTab("rec")};
+$("tabS").onclick=function(){showTab("stat")};
+$("mW").onclick=function(){smode="week";$("mW").classList.add("on");$("mM").classList.remove("on");renderStats()};
+$("mM").onclick=function(){smode="month";$("mM").classList.add("on");$("mW").classList.remove("on");renderStats()};
+function sShift(n){if(smode==="week")sref=new Date(sref.getFullYear(),sref.getMonth(),sref.getDate()+7*n);else sref=new Date(sref.getFullYear(),sref.getMonth()+n,1);renderStats()}
+$("sPrev").onclick=function(){sShift(-1)};
+$("sNext").onclick=function(){sShift(1)};
 load();$("date").value=today();render();
 if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){})})}
 </script>
